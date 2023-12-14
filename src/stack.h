@@ -22,6 +22,7 @@ typedef struct StackNode {
  * This struct holds a pointer to the top node of the stack.
  */
 typedef struct Stack {
+    int64_t size; /**< The stack size. */
     stackNode *head; /**< A pointer to the top node of the stack. */
 } stack;
 

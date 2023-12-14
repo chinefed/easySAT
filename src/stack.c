@@ -2,6 +2,7 @@
 
 void initStack(stack *myStack)
 {
+    myStack->size = 0;
     myStack->head = NULL;
 }
 
@@ -17,6 +18,7 @@ void push(stack *myStack, void *myData)
     newNode->data = myData;
     newNode->previous = myStack->head;
     myStack->head = newNode;
+    (myStack->size)++;
 }
 
 void pop(stack *myStack)
@@ -29,6 +31,7 @@ void pop(stack *myStack)
     stackNode *newHead = (myStack->head)->previous;
     free(myStack->head);
     myStack->head = newHead;
+    (myStack->size)--;
 }
 
 void *peek(stack *myStack)
