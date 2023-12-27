@@ -45,3 +45,22 @@ void free2DArray(void **array, uint32_t n)
     }
     free(array);
 }
+
+void updateStatusBar(int x, int tot)
+{
+    /* Updates a status bar. */
+    int progress = 100 * (float)x / tot;
+    int numHashes = STATUS_BAR_WIDTH * x / tot;
+    printf("\033[2K\r");
+    printf("%% satisfied clauses: [");
+    for (int i = 0; i < STATUS_BAR_WIDTH; i++) {
+        if (i < numHashes) {
+            printf("#");
+        }
+        else {
+            printf(" ");
+        }
+    }
+    printf("] %d%%", progress);
+    fflush(stdout);
+}

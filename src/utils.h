@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <stdint.h>
 
+#define STATUS_BAR_WIDTH 50
+
 /**
  * Allocates a 1-dimensional array of size n, where each element has a size of typeSize.
  * 
@@ -42,5 +44,13 @@ void free1DArray(void *array);
  * @note Cast pointer to void ** before passing it to the function
  */
 void free2DArray(void **array, uint32_t n);
+
+/**
+ * Updates the status bar based on the progress.
+ *
+ * @param x The current progress value.
+ * @param tot The total corresponding to 100% progress.
+ */
+void updateStatusBar(int x, int tot);
 
 #endif

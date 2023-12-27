@@ -4,6 +4,8 @@
 #include "dimacs.h"
 #include "solver.h"
 
+atom *initVariables(atom *clauses, int nVars, int nClauses);
+
 int main(int argc, char *argv[])
 {
     FILE *file;
@@ -14,10 +16,24 @@ int main(int argc, char *argv[])
     }
     
     int32_t nVars, nClauses;
-    atom *clauses;
+    atom *variables, *clauses;
     clauses = parseDimacs(file, &nVars, &nClauses);
     fclose(file);
-    
+    variables = initVariables(clauses, nVars, nClauses);
+
+    printf("Looking for a satisfying assignment...\n");
+
+    solver(variables, clauses);
+
+    freeAtomArray(clauses, nClauses);
+    freeAtomArray(variables, nVars);
+
+    return 0;
+}
+
+atom *initVariables(atom *clauses, int nVars, int nClauses)
+{
+    /* Initialize var atoms. */
     atom *variables;
     variables = initAtomArray(nVars, nClauses);
     for (int i = 0; i < nClauses; i++) {
@@ -33,12 +49,7 @@ int main(int argc, char *argv[])
         }
     }
 
-    solver(variables, clauses);
-
-    freeAtomArray(clauses, nClauses);
-    freeAtomArray(variables, nVars);
-
-    return 0;
+    return variables;
 }
 
 

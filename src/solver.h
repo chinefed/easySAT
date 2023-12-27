@@ -3,6 +3,7 @@
 
 #include <stdlib.h>
 #include <stdint.h>
+#include <inttypes.h>
 #include "bitmap.h"
 #include "utils.h"
 #include "stack.h"

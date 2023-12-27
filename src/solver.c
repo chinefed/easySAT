@@ -103,15 +103,16 @@ void solver(atom *variables, atom *clauses)
     char step = 0;
     uint32_t count = 0;
     while ((step != 1) && (stateStack.head != NULL)) {
-         step = solverStep(&stateStack, variables, clauses, varStatus);
-         count++;
+        step = solverStep(&stateStack, variables, clauses, varStatus);
+        count++;
     }
 
-    printf("Solution found in %d iterations.\n", count);
-
     if (step) {
-        printf("SATISFIABLE\n");
+        int32_t setVars = countSetBits(varStatus);
+        printf("\nSolution found in %d iterations.\n", count);
+        printf("SATISFIABLE (%d assigned variables, %d free variables)\n", setVars, nVars-setVars);
     } else {
+        printf("\033[2K\r");
         printf("UNSATISFIABLE\n");
     }
 
@@ -149,14 +150,17 @@ char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varSt
         return 0;
     }
 
-    int64_t litId = dequeue(topState->searchQueue);
-    int64_t x = (litId > 0) ? (litId-1) : (-litId-1);
+    int32_t litId = dequeue(topState->searchQueue);
+    int32_t x = (litId > 0) ? (litId-1) : (-litId-1);
     switchBit(varStatus, x); // Update varStatus
 
     bitmap* newEvalStatus;
     newEvalStatus = getNewEvalStatus(topState->evalStatus, variables, litId);
     // If the number of bits set in the bitmap is equal to nBits, returns 1
-    if (countSetBits(newEvalStatus) == newEvalStatus->nBits) {
+    int32_t satClauses = countSetBits(newEvalStatus);
+    int32_t nClauses = variables->X->nBits;
+    if (satClauses == newEvalStatus->nBits) {
+        updateStatusBar(satClauses, nClauses);
         return 1;
     }
 
@@ -176,6 +180,7 @@ char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varSt
     newState->evalStatus = newEvalStatus;
     newState->searchQueue = searchQueue;
     push(stateStack, newState);
+    updateStatusBar(satClauses, nClauses);
 
     return 0;
 }
