@@ -18,12 +18,13 @@ void freeState(state *myState);
 void popState(stack *stateStack);
 void clearStateStack(stack *stateStack);
 void baseCase(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus);
-char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus);
+char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus, bitmap *varSign);
 bitmap *getNewEvalStatus(bitmap *evalStatus, atom *variables, int32_t litId);
 queue *getSearchQueue(atom *clauses, bitmap *evalStatus, bitmap *varStatus);
 nextCls getNextClause(atom *clauses, bitmap *evalStatus, bitmap *varStatus);
 int32_t getFreedom(atom *clause, bitmap *varStatus);
 void pushToSearchQueue(queue *searchQueue, atom *clause, bitmap *varStatus);
+void printAssignment(bitmap *varStatus, bitmap *varSign);
 
 atom *initAtomArray(uint32_t n, uint32_t m)
 {
@@ -77,11 +78,7 @@ void popState(stack *stateStack)
 void clearStateStack(stack *stateStack)
 {
     /* Pops the top state from the state stack. */
-    while (stateStack->head != NULL)
-    {
-        state *topState;
-        topState = peek(stateStack);
-        printf("%d ", topState->litID);
+    while (stateStack->head != NULL) {
         popState(stateStack);
     }
 }
@@ -91,8 +88,9 @@ void solver(atom *variables, atom *clauses)
     /* Solver algorithm. */
 
     int32_t nVars = clauses->X->nBits;
-    bitmap *varStatus;
+    bitmap *varStatus, *varSign;
     varStatus = initBitmap(nVars);
+    varSign = initBitmap(nVars);
 
     stack stateStack;
     initStack(&stateStack);
@@ -103,20 +101,23 @@ void solver(atom *variables, atom *clauses)
     char step = 0;
     uint32_t count = 0;
     while ((step != 1) && (stateStack.head != NULL)) {
-        step = solverStep(&stateStack, variables, clauses, varStatus);
+        step = solverStep(&stateStack, variables, clauses, varStatus, varSign);
         count++;
     }
 
+    printf("\033[2K\r");
+    printf("\nSolution found in %" PRIu32 " solver steps.\n", count);
+
     if (step) {
         int32_t setVars = countSetBits(varStatus);
-        printf("\nSolution found in %d iterations.\n", count);
-        printf("SATISFIABLE (%d assigned variables, %d free variables)\n", setVars, nVars-setVars);
+        printf("\nSATISFIABLE (%" PRId32 " assigned variables, %" PRId32 " free variables)\n", setVars, nVars-setVars);
+        printAssignment(varStatus, varSign);
     } else {
-        printf("\033[2K\r");
         printf("UNSATISFIABLE\n");
     }
 
     freeBitmap(varStatus);
+    freeBitmap(varSign);
     clearStateStack(&stateStack);
 
 }
@@ -133,7 +134,7 @@ void baseCase(stack *stateStack, atom *variables, atom *clauses, bitmap *varStat
     push(stateStack, baseState);
 }
 
-char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus)
+char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus, bitmap *varSign)
 {
     /* Step of the solver algorithm. */
     state *topState;
@@ -144,6 +145,7 @@ char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varSt
         if (topState->x >= 0) {
             // Revert varStatus update
             switchBit(varStatus, topState->x);
+            clearBit(varSign, topState->x);
         }
         // Pop state from the stack
         popState(stateStack);
@@ -153,6 +155,10 @@ char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varSt
     int32_t litId = dequeue(topState->searchQueue);
     int32_t x = (litId > 0) ? (litId-1) : (-litId-1);
     switchBit(varStatus, x); // Update varStatus
+    if (litId < 0) {
+        // 0 : x, 1 : -x
+        switchBit(varSign, x);
+    }
 
     bitmap* newEvalStatus;
     newEvalStatus = getNewEvalStatus(topState->evalStatus, variables, litId);
@@ -170,6 +176,7 @@ char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varSt
         // Conflict detected
         // Revert varStatus update
         switchBit(varStatus, x);
+        clearBit(varSign, x);
         return 0;
     }
 
@@ -271,4 +278,34 @@ void pushToSearchQueue(queue *searchQueue, atom *clause, bitmap *varStatus)
             j++;
         }
     }
+}
+
+void printAssignment(bitmap *varStatus, bitmap *varSign)
+{
+    /* Prints the truth assignment */
+    int32_t nVars = varStatus->nBits;
+    int32_t *buffer = (int32_t *)allocate1DArray(nVars, sizeof(int32_t));
+
+    // Get var IDs from bitmap
+    for (int32_t i = 0; i < nVars; i++) {
+        if (readBitmap(varStatus)) {
+            buffer[i] = i+1;
+        }
+    }
+
+    // Get signs from bitmap
+    for (int32_t i = 0; i < nVars; i++) {
+        if (readBitmap(varSign)) {
+            buffer[i] = -buffer[i];
+        }
+    }
+
+    // Print
+    for (int32_t i = 0; i < nVars; i++) {
+        if (buffer[i] != 0) {
+            printf("%" PRId32 " ", buffer[i]);
+        }
+    }
+
+    free1DArray(buffer);
 }

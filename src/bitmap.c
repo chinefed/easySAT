@@ -42,6 +42,13 @@ void switchBit(bitmap *myBitmap, int32_t i)
     (myBitmap->map)[wordIdx] ^= (uint64_t)1 << bitIdx;
 }
 
+void clearBit(bitmap *myBitmap, int32_t i)
+{
+    int32_t wordIdx = getWordIdx(i);
+    char bitIdx = getBitIdx(i);
+    (myBitmap->map)[wordIdx] &= ~((uint64_t)1 << bitIdx);
+}
+
 char getBit(bitmap *myBitmap, int32_t i)
 {
     /* Reads the value of a bit in a bitmap. */

@@ -58,6 +58,14 @@ char getBitIdx(int32_t i);
 void switchBit(bitmap *myBitmap, int32_t i);
 
 /**
+ * Clears a bit within a bitmap.
+ *
+ * @param myBitmap The bitmap to modify.
+ * @param i The index of the bit to clear.
+ */
+void clearBit(bitmap *myBitmap, int32_t i);
+
+/**
  * Reads the value of a bit in a bitmap.
  *
  * @param myBitmap The bitmap to read from.
