@@ -5,6 +5,8 @@ typedef struct State {
     int32_t x; /**< Var evaluated at the current state. */
     int32_t litID;
     bitmap *evalStatus; /**< Evaluation status (true clauses). */
+    bitmap *varStatus; /**< Assigned variables. */
+    bitmap *varSign; /**< Polarity of the assignment. */
     queue *searchQueue; /**< Literals for generating assignments. */
 } state;
 
@@ -13,13 +15,13 @@ typedef struct NextCls {
     int32_t freedom; /**< Freedom of the next clause. */
 } nextCls;
 
-state *initState();
+state *initState(int32_t nVars, int32_t nClauses);
 void freeState(state *myState);
 void popState(stack *stateStack);
 void clearStateStack(stack *stateStack);
-void baseCase(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus);
-char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus, bitmap *varSign);
-bitmap *getNewEvalStatus(bitmap *evalStatus, atom *variables, int32_t litId);
+void baseCase(stack *stateStack, atom *variables, atom *clauses);
+char solverStep(stack *stateStack, atom *variables, atom *clauses);
+void manageConflict(stack *stateStack, state *topState, atom *variables);
 queue *getSearchQueue(atom *clauses, bitmap *evalStatus, bitmap *varStatus);
 nextCls getNextClause(atom *clauses, bitmap *evalStatus, bitmap *varStatus);
 int32_t getFreedom(atom *clause, bitmap *varStatus);
@@ -48,13 +50,15 @@ void freeAtomArray(atom *myAtomArray, uint32_t n)
     free1DArray((void *)myAtomArray);
 }
 
-state *initState()
+state *initState(int32_t nVars, int32_t nClauses)
 {
     /* Allocates a state. */
     state *myState;
     myState = (state *)malloc(sizeof(state));
     myState->x = -1;
-    myState->evalStatus = NULL;
+    myState->evalStatus = initBitmap(nClauses);
+    myState->varStatus = initBitmap(nVars);
+    myState->varSign = initBitmap(nVars);
     myState->searchQueue = NULL;
 
     return myState;
@@ -64,7 +68,11 @@ void freeState(state *myState)
 {
     /* Deallocates a state. */
     freeBitmap(myState->evalStatus);
-    freeQueue(myState->searchQueue);
+    freeBitmap(myState->varStatus);
+    freeBitmap(myState->varSign);
+    if (myState->searchQueue != NULL) {
+        freeQueue(myState->searchQueue);
+    }
     free(myState);
 }
 
@@ -87,21 +95,16 @@ void solver(atom *variables, atom *clauses)
 {
     /* Solver algorithm. */
 
-    int32_t nVars = clauses->X->nBits;
-    bitmap *varStatus, *varSign;
-    varStatus = initBitmap(nVars);
-    varSign = initBitmap(nVars);
-
     stack stateStack;
     initStack(&stateStack);
 
     // Base case
-    baseCase(&stateStack, variables, clauses, varStatus);
+    baseCase(&stateStack, variables, clauses);
 
     char step = 0;
     uint32_t count = 0;
     while ((step != 1) && (stateStack.head != NULL)) {
-        step = solverStep(&stateStack, variables, clauses, varStatus, varSign);
+        step = solverStep(&stateStack, variables, clauses);
         count++;
     }
 
@@ -109,32 +112,33 @@ void solver(atom *variables, atom *clauses)
     printf("\nSolution found in %" PRIu32 " solver steps.\n", count);
 
     if (step) {
-        int32_t setVars = countSetBits(varStatus);
+        state *topState;
+        topState = peek(&stateStack);
+        int32_t nVars = clauses->X->nBits;
+        int32_t setVars = countSetBits(topState->varStatus);
         printf("\nSATISFIABLE (%" PRId32 " assigned variables, %" PRId32 " free variables)\n", setVars, nVars-setVars);
-        printAssignment(varStatus, varSign);
-    } else {
+        printAssignment(topState->varStatus, topState->varSign);
+    }
+    else {
         printf("UNSATISFIABLE\n");
     }
 
-    freeBitmap(varStatus);
-    freeBitmap(varSign);
     clearStateStack(&stateStack);
-
 }
 
-void baseCase(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus)
+void baseCase(stack *stateStack, atom *variables, atom *clauses)
 {
+    int32_t nVars = clauses->X->nBits;
     int32_t nClauses = variables->X->nBits;
     state *baseState;
-    baseState = initState();
+    baseState = initState(nVars, nClauses);
     baseState->x = -1;
     baseState->litID = 0;
-    baseState->evalStatus = initBitmap(nClauses);
-    baseState->searchQueue = getSearchQueue(clauses, baseState->evalStatus, varStatus);
+    baseState->searchQueue = getSearchQueue(clauses, baseState->evalStatus, baseState->varStatus);
     push(stateStack, baseState);
 }
 
-char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varStatus, bitmap *varSign)
+char solverStep(stack *stateStack, atom *variables, atom *clauses)
 {
     /* Step of the solver algorithm. */
     state *topState;
@@ -142,83 +146,87 @@ char solverStep(stack *stateStack, atom *variables, atom *clauses, bitmap *varSt
 
     if (topState->searchQueue->n == 0) {
         // Conflict detected
-        if (topState->x >= 0) {
-            // Revert varStatus update
-            switchBit(varStatus, topState->x);
-            clearBit(varSign, topState->x);
-        }
-        // Pop state from the stack
-        popState(stateStack);
+        manageConflict(stateStack, topState, variables);
         return 0;
     }
 
-    int32_t litId = dequeue(topState->searchQueue);
-    int32_t x = (litId > 0) ? (litId-1) : (-litId-1);
-    switchBit(varStatus, x); // Update varStatus
-    if (litId < 0) {
+    int32_t nVars = clauses->X->nBits;
+    int32_t nClauses = variables->X->nBits;
+
+    state *newState;
+    newState = initState(nVars, nClauses);
+    newState->litID = dequeue(topState->searchQueue);
+    newState->x = (newState->litID > 0) ? (newState->litID-1) : (-newState->litID-1);
+
+    // Copy status bitmap from topState
+    bitmapOR(newState->evalStatus, topState->evalStatus);
+    bitmapOR(newState->varStatus, topState->varStatus);
+    bitmapOR(newState->varSign, topState->varSign);
+
+    // We want to make true clauses that include litID.
+    bitmap *litBitmap;
+    // 1) if it has positive polarity ("x", positive litID), we assign TRUE to x;
+    // 2) if it has negative polarity ("not x", negative litID), we assign FALSE to x.
+    litBitmap = (newState->litID > 0) ? variables[newState->litID-1].X : variables[-newState->litID-1].notX;
+    // The bits set in "newState->evalStatus" are the ones set in "topState->evalStatus"
+    // + some additional ones corresponding to the clauses that have become
+    // true following the current assignment.
+    bitmapOR(newState->evalStatus, litBitmap);
+
+    // Update varStatus and varSign bitmaps
+    switchBit(newState->varStatus, newState->x);
+    if (newState->litID < 0) {
         // 0 : x, 1 : -x
-        switchBit(varSign, x);
+        switchBit(newState->varSign, newState->x);
     }
 
-    bitmap* newEvalStatus;
-    newEvalStatus = getNewEvalStatus(topState->evalStatus, variables, litId);
-    // If the number of bits set in the bitmap is equal to nBits, returns 1
-    int32_t satClauses = countSetBits(newEvalStatus);
-    int32_t nClauses = variables->X->nBits;
-    if (satClauses == newEvalStatus->nBits) {
-        updateStatusBar(satClauses, nClauses);
+    // Get the search queue
+    newState->searchQueue = getSearchQueue(clauses, newState->evalStatus, newState->varStatus);
+
+    // Push the newState to the Stack
+    push(stateStack, newState);
+
+    // Update status bar
+    int32_t satClauses = countSetBits(newState->evalStatus);
+    updateStatusBar(satClauses, nClauses);
+
+    if (satClauses == nClauses) {
+        // If all the clauses are sat
         return 1;
     }
 
-    queue *searchQueue;
-    searchQueue = getSearchQueue(clauses, newEvalStatus, varStatus);
-    if (searchQueue->n == 0) {
-        // Conflict detected
-        // Revert varStatus update
-        switchBit(varStatus, x);
-        clearBit(varSign, x);
-        return 0;
-    }
-
-    state *newState;
-    newState = initState();
-    newState->x = x;
-    newState->litID = litId;
-    newState->evalStatus = newEvalStatus;
-    newState->searchQueue = searchQueue;
-    push(stateStack, newState);
-    updateStatusBar(satClauses, nClauses);
-
+    // If there are unsat clauses
     return 0;
 }
 
-bitmap *getNewEvalStatus(bitmap *evalStatus, atom *variables, int32_t litId)
+void manageConflict(stack *stateStack, state *topState, atom *variables)
 {
-    /* Get updated eval status following a truth assignment. */
-    // The function receives as input a literal ID.
-    // We want to make true clauses that include such a literal: 
-    // 1) if it has positive polarity ("x", positive literal ID), we assign TRUE to x;
-    // 2) if it has negative polarity ("not x", negative literal ID), we assign FALSE to x.
-    bitmap *newEvalStatus;
-    newEvalStatus = initBitmap(evalStatus->nBits);
-    bitmap *litBitmap;
-    // Get the bitmap with the clauses made true by the assignment.
-    litBitmap = (litId > 0) ? variables[litId-1].X : variables[-litId-1].notX;
-    int32_t nWords =  getWordIdx(evalStatus->nBits-1)+1;
-    for (int32_t i = 0; i < nWords; i++) {
-        // The bits set in "newEvalStatus" are the ones set in "evalStatus"
-        // + some additional ones corresponding to the clauses that have become
-        // true following the current assignment.
-        newEvalStatus->map[i] = evalStatus->map[i] | litBitmap->map[i];
+    /* Manage conflict. */
+    int32_t x = topState->x;
+    int32_t litID = -topState->litID;
+    popState(stateStack);
+    if (stateStack->head == NULL) {
+        // The formula is unsat
+        return;
     }
-
-    return newEvalStatus;
+    topState = peek(stateStack);
+    switchBit(topState->varStatus, x);
+    if (litID < 0) {
+        switchBit(topState->varSign, x);
+    }
+    bitmap *litBitmap;
+    litBitmap = (litID > 0) ? variables[litID-1].X : variables[-litID-1].notX;
+    bitmapOR(topState->evalStatus, litBitmap);
 }
 
 queue *getSearchQueue(atom *clauses, bitmap *evalStatus, bitmap *varStatus)
 {
     /* Builds the search queue. */
     nextCls nextClause = getNextClause(clauses, evalStatus, varStatus);
+    if (nextClause.index == -1) {
+        return NULL;
+    }
+
     queue *searchQueue;
     searchQueue = initQueue(nextClause.freedom);
 
@@ -232,6 +240,7 @@ nextCls getNextClause(atom *clauses, bitmap *evalStatus, bitmap *varStatus)
     /* Determines the next caluse to evaluate
     (i.e., the clause with the lowest freedom). */
     nextCls nextClause;
+    nextClause.index = -1;
     nextClause.freedom = INT32_MAX;
     for (int32_t i = 0; i < evalStatus->nBits; i++) {
         if (!readBitmap(evalStatus)) {

@@ -99,6 +99,14 @@ char countSetBitsInWord(uint64_t word);
 int32_t countSetBits(bitmap *myBitmap);
 
 /**
+ * Performs a bitwise OR operation between two bitmaps and updates the left bitmap.
+ *
+ * @param leftBitmap  The bitmap to be updated.
+ * @param rightBitmap The bitmap to perform the OR operation with.
+ */
+void bitmapOR(bitmap *leftBitmap, bitmap *rightBitmap);
+
+/**
  * Prints bits from 0 up to nBits-1.
  *
  * @param myBitmap The bitmap to print.

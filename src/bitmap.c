@@ -117,6 +117,15 @@ int32_t countSetBits(bitmap *myBitmap)
     return nSetBits;
 }
 
+void bitmapOR(bitmap *leftBitmap, bitmap *rightBitmap)
+{
+    /* Performs a bitwise OR operation between two bitmaps and updates the left bitmap. */
+    int32_t nWords =  getWordIdx(leftBitmap->nBits-1)+1;
+    for (int32_t i = 0; i < nWords; i++) {
+        leftBitmap->map[i] = leftBitmap->map[i] | rightBitmap->map[i];
+    }
+}
+
 void printBitmap(bitmap *myBitmap)
 {
     /* Prints the frist N bits of a bitmap up to the limit. */

@@ -1,6 +1,6 @@
 # Compiler and flags
 CC := gcc
-CFLAGS := -Wall -O3 -g -fsanitize=address
+CFLAGS := -Wall -O3 -g
 
 # Source and object files
 SRCDIR := ./src
