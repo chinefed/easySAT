@@ -67,6 +67,10 @@ atom *parseDimacs(FILE *file, int32_t *nVars, int32_t *nClauses) {
     int32_t clsNum, i;
     clsNum = i = 0;
     while (fscanf(file, " %" SCNd32, &x) == 1) {
+        if (clsNum >= *nClauses) {
+            fprintf(stderr, "Wrong number of clauses in the problem line.\n");
+            exit(1);
+        }
         // Detect empty clauses
         emptyClsDetect(x);
         // In case a 0 is parsed, increases the clause counter
