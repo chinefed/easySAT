@@ -15,7 +15,7 @@ void *allocate1DArray(uint32_t n, uint32_t typeSize)
 void **allocate2DArray(uint32_t n, uint32_t m, uint32_t typeSize) 
 {
     /* Allocates a 2-dimensional array of size n x m, where each element has a size of typeSize. */
-    void **array = (void **)calloc(m, sizeof(void *));
+    void **array = (void **)calloc(n, sizeof(void *));
     if (array == NULL) {
         fprintf(stderr, "Memory allocation failed.\n");
         exit(1);
